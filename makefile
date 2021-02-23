@@ -4,25 +4,51 @@
 # make targets:
 # make [all]	build a distributable installer (default)
 # make pkg	build an installer, bypassing the system checks
+# make build	build the software (no installer)
+# make install	install wsltty locally from build (no installer needed)
 # make wsltty	build the software, using the local copy of mintty
 
 
 # wsltty release
-ver=3.1.8
+ver=3.4.5
 
 # wsltty appx release - must have 4 parts!
-verx=3.1.8.0
+verx=3.4.5.0
 
 
+##############################
 # mintty release version
-minttyver=3.1.8
 
-# wslbridge2 release version
-#repo=Biswa96/wslbridge2
-#wslbridgever=0.5
+minttyver=3.4.5
 
-repo=mintty/wslbridge2
-wslbridgever=0.5.1
+##############################
+
+# wslbridge2 repository
+repo=Biswa96/wslbridge2
+
+# wslbridge2 master release version
+wslbridgever=0.6
+
+# wslbridge2 latest version
+#archive=master
+#wslbridgedir=wslbridge2-$(archive)
+
+# wslbridge2 branch or commit version (from fix-window-resize branch) and dir
+#commit=70e0dcea1db122d076ce1578f2a45280cc92d09f
+#commit=8b6dd7ee2b3102d72248990c21764c5cf86c6612
+#archive=$(commit)
+#wslbridgedir=wslbridge2-$(archive)
+
+
+# wslbridge2 fork repository and version
+#repo=mintty/wslbridge2
+#wslbridgever=0.5.1
+
+
+# wslbridge2 release or fork archive and dir
+archive=v$(wslbridgever)
+wslbridgedir=wslbridge2-$(wslbridgever)
+
 
 ##############################
 
@@ -108,7 +134,7 @@ fix-verx:
 # clear binaries
 
 clean:
-	rm -fr wslbridge2-$(wslbridgever)/bin
+	rm -fr $(wslbridgedir)/bin
 	rm -fr bin
 
 #############################################################################
@@ -116,20 +142,22 @@ clean:
 
 wslbridge:	$(wslbridge)
 
-wslbridge2-$(wslbridgever).zip:
-	$(wgeto) https://github.com/$(repo)/archive/v$(wslbridgever).zip -o wslbridge2-$(wslbridgever).zip
+$(wslbridgedir).zip:
+	$(wgeto) https://github.com/$(repo)/archive/$(archive).zip -o $(wslbridgedir).zip
 
-wslbridge-source:	wslbridge2-$(wslbridgever).zip
-	unzip -ou wslbridge2-$(wslbridgever).zip
-	cp wslbridge2-$(wslbridgever)/LICENSE LICENSE.wslbridge2
+wslbridge-source:	$(wslbridgedir).zip
+	unzip -o $(wslbridgedir).zip
+	cp $(wslbridgedir)/LICENSE LICENSE.wslbridge2
+	# patch
+	cd $(wslbridgedir); patch -p1 < ../0001-notify-size-change-inband.patch
 
 wslbridge-frontend:	wslbridge-source
 	echo ------------- Compiling wslbridge2 frontend
 	mkdir -p bin
 	# frontend build
-	cd wslbridge2-$(wslbridgever)/src; make -f Makefile.frontend RELEASE=1
+	cd $(wslbridgedir)/src; make -f Makefile.frontend RELEASE=1
 	# extract binaries
-	cp wslbridge2-$(wslbridgever)/bin/wslbridge2.exe bin/
+	cp $(wslbridgedir)/bin/wslbridge2.exe bin/
 
 windir=$(shell cd "${WINDIR}"; pwd)
 
@@ -140,9 +168,9 @@ wslbridge-backend:	wslbridge-source
 	# provide dependencies for backend build
 	PATH="$(windir)/Sysnative:${PATH}" cmd /C wsl.exe -u root $(BuildDistr) $(shell env | grep http_proxy=) apk add make g++ linux-headers < /dev/null
 	# invoke backend build
-	cd wslbridge2-$(wslbridgever)/src; PATH="$(windir)/Sysnative:${PATH}" cmd /C wsl.exe $(BuildDistr) make -f Makefile.backend RELEASE=1 < /dev/null
+	cd $(wslbridgedir)/src; PATH="$(windir)/Sysnative:${PATH}" cmd /C wsl.exe $(BuildDistr) make -f Makefile.backend RELEASE=1 < /dev/null
 	# extract binaries
-	cp wslbridge2-$(wslbridgever)/bin/wslbridge2-backend bin/
+	cp $(wslbridgedir)/bin/wslbridge2-backend bin/
 
 mintty-get:
 	$(wgeto) https://github.com/mintty/mintty/archive/$(minttyver).zip -o mintty-$(minttyver).zip
@@ -214,38 +242,48 @@ appx-bin:
 	cp /bin/cygwin1.dll bin/
 	cp /bin/cygwin-console-helper.exe bin/
 
-cop:	ver
-	mkdir -p rel
-	rm -f rel/wsltty-$(ver)-install-$(arch).exe
-	sed -e "s,%version%,$(ver)," -e "s,%arch%,$(arch)," makewinx.cfg > rel/wsltty.SED
-	cp bin/cygwin1.dll rel/
-	cp bin/cygwin-console-helper.exe rel/
-	cp bin/dash.exe rel/
-	cp bin/regtool.exe rel/
-	cp bin/mintty.exe rel/
-	cp bin/zoo.exe rel/
-	cp lang.zoo rel/
-	cp themes.zoo rel/
-	cp sounds.zoo rel/
-	cp charnames.txt rel/
-	cp bin/wslbridge2.exe rel/
-	cp bin/wslbridge2-backend rel/
-	cp mkshortcut.vbs rel/
-	#cp bin/mkshortcut.exe rel/
-	#cp bin/cygpopt-0.dll rel/
-	#cp bin/cygiconv-2.dll rel/
-	#cp bin/cygintl-8.dll rel/
-	cp LICENSE.* rel/
-	cp VERSION rel/
-	cp *.lnk rel/
-	cp *.ico rel/
-	cp *.url rel/
-	cp *.bat rel/
-	cp *.sh rel/
-	cp *.vbs rel/
+CAB=wsltty-$(ver)-$(arch)
 
-cab:	cop
+copcab:	ver
+	mkdir -p $(CAB)
+	cp bin/cygwin1.dll $(CAB)/
+	cp bin/cygwin-console-helper.exe $(CAB)/
+	cp bin/dash.exe $(CAB)/
+	cp bin/regtool.exe $(CAB)/
+	cp bin/mintty.exe $(CAB)/
+	cp bin/zoo.exe $(CAB)/
+	cp lang.zoo $(CAB)/
+	cp themes.zoo $(CAB)/
+	cp sounds.zoo $(CAB)/
+	cp charnames.txt $(CAB)/
+	cp bin/wslbridge2.exe $(CAB)/
+	cp bin/wslbridge2-backend $(CAB)/
+	cp mkshortcut.vbs $(CAB)/
+	#cp bin/mkshortcut.exe $(CAB)/
+	#cp bin/cygpopt-0.dll $(CAB)/
+	#cp bin/cygiconv-2.dll $(CAB)/
+	#cp bin/cygintl-8.dll $(CAB)/
+	cp LICENSE.* $(CAB)/
+	cp VERSION $(CAB)/
+	cp *.lnk $(CAB)/
+	cp *.ico $(CAB)/
+	cp *.url $(CAB)/
+	cp *.bat $(CAB)/
+	cp config-distros.sh $(CAB)/
+	cp mkshortcut.vbs $(CAB)/
+
+cop:	copcab
+	mkdir -p rel
+	cp -fl $(CAB)/* rel/
+
+installer:	cop
+	# prepare build of installer
+	rm -f rel/$(CAB)-install.exe
+	sed -e "s,%version%,$(ver)," -e "s,%arch%,$(arch)," makewinx.cfg > rel/wsltty.SED
+	# build installer
 	cd rel; iexpress /n wsltty.SED
+	# build cab archive
+	lcab -r $(CAB) rel/$(CAB).cab
 
 install:	cop installbat
 
@@ -262,8 +300,11 @@ mintty-usr:	mintty-get mintty-appx
 # local wsltty build target:
 wsltty:	wslbridge cygwin mintty-build mintty-pkg
 
+# build software without installer:
+build:	wslbridge cygwin mintty-get mintty-build mintty-pkg
+
 # standalone wsltty package build target:
-pkg:	wslbridge cygwin mintty-get mintty-build mintty-pkg cab
+pkg:	wslbridge cygwin mintty-get mintty-build mintty-pkg installer
 
 # appx package contents target:
 wsltty-appx:	wslbridge appx-bin mintty-get mintty-build-appx mintty-appx
